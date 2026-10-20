@@ -25,6 +25,11 @@
             cursor: pointer; color: #3E2723;
         }
         select:focus { border-color: #DF3A2C; }
+        .campo-texto {
+            width: 100%; padding: 15px; font-size: 1.1rem; border: 2px solid #ddd; background: white;
+            border-radius: 10px; margin-bottom: 15px; outline: none; color: #3E2723; display: none;
+        }
+        .campo-texto:focus { border-color: #DF3A2C; }
         .etiqueta { display: block; text-align: left; font-size: 0.85rem; font-weight: bold; color: #5D4037; margin-bottom: 6px; text-transform: uppercase; }
         .contenedor-botones { display: flex; gap: 15px; margin-top: 10px; }
         button {
@@ -92,6 +97,7 @@
         <select id="lugar">
             <option value="none" selected disabled>Selecciona el lugar...</option>
         </select>
+        <input type="text" id="lugar-otro" class="campo-texto" maxlength="60" placeholder="Escribí el lugar de trabajo...">
 
         <div class="contenedor-botones">
             <button class="btn-entrada" onclick="marcar('entrada')"><i class="fa-solid fa-arrow-right-to-bracket" style="margin-right: 8px;"></i> ENTRADA</button>
@@ -142,7 +148,17 @@
         function guardarLugar(valor) {
             try { localStorage.setItem('lugar', valor); } catch (e) {}
         }
-        document.getElementById('lugar').addEventListener('change', e => guardarLugar(e.target.value));
+        // Si eligen "Otro" aparece el campo para escribir el lugar
+        const LUGAR_OTRO = 'Otro';
+        function mostrarCampoOtro() {
+            const esOtro = document.getElementById('lugar').value === LUGAR_OTRO;
+            document.getElementById('lugar-otro').style.display = esOtro ? 'block' : 'none';
+            return esOtro;
+        }
+        document.getElementById('lugar').addEventListener('change', e => {
+            guardarLugar(e.target.value);
+            if (mostrarCampoOtro()) document.getElementById('lugar-otro').focus();
+        });
 
         function actualizarPantalla() {
             fetch(API_URL)
@@ -171,6 +187,7 @@
                         const attr = l === lugarActual ? 'selected' : '';
                         selLugar.innerHTML += `<option value="${esc(l)}" ${attr}>${esc(l)}</option>`;
                     });
+                    mostrarCampoOtro();
                 })
                 .catch(error => console.error('Error al obtener datos:', error));
         }
@@ -189,6 +206,12 @@
                 mostrarMensaje('⚠️ Selecciona el lugar de trabajo', 'error');
                 return;
             }
+            const lugarOtro = document.getElementById('lugar-otro').value.trim();
+            if (tipo === 'entrada' && lugar === LUGAR_OTRO && !lugarOtro) {
+                mostrarMensaje('⚠️ Escribí el lugar de trabajo', 'error');
+                document.getElementById('lugar-otro').focus();
+                return;
+            }
             const botones = document.querySelectorAll('.contenedor-botones button');
             botones.forEach(b => b.disabled = true);
 
@@ -196,12 +219,13 @@
             fetch(API_URL, {
                 method: 'POST',
                 headers: {'Content-Type': 'text/plain;charset=utf-8'},
-                body: JSON.stringify({ nombre: nombre, tipo: tipo, lugar: lugar })
+                body: JSON.stringify({ nombre: nombre, tipo: tipo, lugar: lugar, lugarOtro: lugarOtro })
             })
                 .then(r => r.json())
                 .then(datos => {
                     botones.forEach(b => b.disabled = false);
                     mostrarMensaje(datos.msg, datos.status === 'success' ? 'exito' : 'error');
+                    if (datos.status === 'success') document.getElementById('lugar-otro').value = '';
                     actualizarPantalla();
                 })
                 .catch(() => {
