@@ -170,10 +170,18 @@
             if (mostrarCampoOtro()) document.getElementById('lugar-otro').focus();
         });
 
+        // Evita que una consulta vieja (lenta) pise los datos de una marcada mas nueva
+        let ultimaMarcada = 0;
+
         function actualizarPantalla() {
+            const inicio = Date.now();
             fetch(API_URL)
                 .then(r => r.json())
-                .then(datos => {
+                .then(datos => { if (inicio > ultimaMarcada) pintarEstado(datos); })
+                .catch(error => console.error('Error al obtener datos:', error));
+        }
+
+        function pintarEstado(datos) {
                     document.getElementById('num-sala').innerText = datos.en_sala;
                     document.getElementById('num-total').innerText = datos.total;
                     document.getElementById('num-salieron').innerText = datos.ya_salieron;
@@ -198,8 +206,6 @@
                         selLugar.innerHTML += `<option value="${esc(l)}" ${attr}>${esc(l)}</option>`;
                     });
                     mostrarCampoOtro();
-                })
-                .catch(error => console.error('Error al obtener datos:', error));
         }
         actualizarPantalla();
         // Refresca cada 30 segundos para ver lo que marcan en otros edificios
@@ -223,7 +229,11 @@
                 return;
             }
             const botones = document.querySelectorAll('.contenedor-botones button');
+            const boton = document.querySelector(tipo === 'entrada' ? '.btn-entrada' : '.btn-salida');
+            const textoBoton = boton.innerHTML;
             botones.forEach(b => b.disabled = true);
+            boton.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right: 8px;"></i> MARCANDO...';
+            const listo = () => { botones.forEach(b => b.disabled = false); boton.innerHTML = textoBoton; };
 
             // text/plain para que el navegador no haga la consulta previa (CORS) que Apps Script no responde
             fetch(API_URL, {
@@ -233,13 +243,14 @@
             })
                 .then(r => r.json())
                 .then(datos => {
-                    botones.forEach(b => b.disabled = false);
+                    listo();
                     mostrarMensaje(datos.msg, datos.status === 'success' ? 'exito' : 'error');
                     if (datos.status === 'success') document.getElementById('lugar-otro').value = '';
-                    actualizarPantalla();
+                    ultimaMarcada = Date.now();
+                    if (datos.estado) pintarEstado(datos.estado); else actualizarPantalla();
                 })
                 .catch(() => {
-                    botones.forEach(b => b.disabled = false);
+                    listo();
                     mostrarMensaje('Error de conexión, intenta de nuevo', 'error');
                 });
         }
