@@ -134,6 +134,37 @@
             navigator.serviceWorker.register('sw.js').catch(() => {});
         }
 
+        // ---- La pagina se actualiza sola ----
+        // Antes, un celular que volvia a abrir la pagina dias despues seguia con la version vieja (y la direccion vieja
+        // del Apps Script): marcaba, salia "registrada", pero la marca no quedaba donde la busca la version actual.
+        // Ahora: al volver a la pagina despues de un rato se recarga entera, y si se publico una version nueva
+        // (version.txt distinto) tambien se recarga, aunque la pagina nunca se haya cerrado (PC de escritorio).
+        const VERSION = '2026-11-19';
+        let ocultaDesde = 0;
+        function recargar() {
+            // Freno: si recien se recargo (menos de 2 minutos) no vuelve a hacerlo, para que nunca quede en bucle
+            try {
+                const ultima = Number(sessionStorage.getItem('recargada') || 0);
+                if (Date.now() - ultima < 120000) return;
+                sessionStorage.setItem('recargada', String(Date.now()));
+            } catch (e) {}
+            location.reload();
+        }
+        function revisarVersion() {
+            return fetch('version.txt?t=' + Date.now(), { cache: 'no-store' })
+                .then(r => r.ok ? r.text() : VERSION)
+                .then(v => { if (v.trim() && v.trim() !== VERSION) { recargar(); return false; } return true; })
+                .catch(() => true);
+        }
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) { ocultaDesde = Date.now(); return; }
+            if (ocultaDesde && Date.now() - ocultaDesde > 60 * 1000) recargar(); else revisarVersion();
+        });
+        // El navegador a veces "congela" la pagina y la devuelve igual al tocar Atras o al reabrir la app
+        window.addEventListener('pageshow', e => { if (e.persisted) recargar(); });
+        // Red de seguridad: una pagina abierta hace mas de 6 horas se recarga
+        const cargadaEn = Date.now();
+
         let datosEnSala = [];
         let datosFinalizados = [];
 
@@ -174,6 +205,8 @@
         let ultimaMarcada = 0;
 
         function actualizarPantalla() {
+            if (Date.now() - cargadaEn > 6 * 3600 * 1000) { recargar(); return; }
+            revisarVersion();
             const inicio = Date.now();
             fetch(API_URL)
                 .then(r => r.json())
@@ -235,6 +268,8 @@
             boton.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right: 8px;"></i> MARCANDO...';
             const listo = () => { botones.forEach(b => b.disabled = false); boton.innerHTML = textoBoton; };
 
+            // Si se publico una version nueva, primero se recarga (asi nadie marca con la pagina vieja)
+            revisarVersion().then(vigente => { if (!vigente) return;
             // text/plain para que el navegador no haga la consulta previa (CORS) que Apps Script no responde
             fetch(API_URL, {
                 method: 'POST',
@@ -253,6 +288,7 @@
                     listo();
                     mostrarMensaje('Error de conexión, intenta de nuevo', 'error');
                 });
+            });
         }
 
         function mostrarMensaje(texto, claseColor) {
