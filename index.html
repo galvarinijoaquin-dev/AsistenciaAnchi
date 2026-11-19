@@ -139,7 +139,7 @@
         // del Apps Script): marcaba, salia "registrada", pero la marca no quedaba donde la busca la version actual.
         // Ahora: al volver a la pagina despues de un rato se recarga entera, y si se publico una version nueva
         // (version.txt distinto) tambien se recarga, aunque la pagina nunca se haya cerrado (PC de escritorio).
-        const VERSION = '2026-11-19';
+        const VERSION = '2026-11-19b';
         let ocultaDesde = 0;
         function recargar() {
             // Freno: si recien se recargo (menos de 2 minutos) no vuelve a hacerlo, para que nunca quede en bucle
@@ -286,17 +286,21 @@
                 })
                 .catch(() => {
                     listo();
-                    mostrarMensaje('Error de conexión, intenta de nuevo', 'error');
+                    // Bien visible y por mas tiempo: antes duraba 3 segundos y la gente se iba creyendo que habia marcado
+                    mostrarMensaje('❌ NO SE REGISTRÓ. Revisá la conexión y volvé a tocar el botón.', 'error', 10000);
                 });
             });
         }
 
-        function mostrarMensaje(texto, claseColor) {
+        let tMensaje;
+        function mostrarMensaje(texto, claseColor, duracion) {
             const notif = document.getElementById('notificacion');
             notif.innerText = texto;
             notif.className = `mensaje ${claseColor}`;
             notif.style.display = 'block';
-            setTimeout(() => { notif.style.display = 'none'; }, 3000);
+            clearTimeout(tMensaje);
+            // Los errores quedan mas tiempo en pantalla que los avisos de exito
+            tMensaje = setTimeout(() => { notif.style.display = 'none'; }, duracion || (claseColor === 'error' ? 8000 : 3000));
         }
 
         function abrirConsulta(tipo) {
