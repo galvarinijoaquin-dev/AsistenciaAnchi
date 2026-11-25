@@ -46,6 +46,10 @@
         button:disabled { opacity: 0.6; cursor: wait; }
         .btn-entrada { background-color: #388E3C; }
         .btn-salida { background-color: #DF3A2C; }
+        .estado-persona { display: none; margin: -6px 0 14px; padding: 10px 12px; border-radius: 10px; font-weight: 600; font-size: 0.95rem; }
+        .estado-persona.adentro { display: block; background: #E8F5E9; color: #2E7D32; border: 1px solid #C8E6C9; }
+        .estado-persona.afuera { display: block; background: #FFF3E0; color: #8D4E00; border: 1px solid #FFE0B2; }
+        .estado-persona.cargando { display: block; background: #F5F5F5; color: #757575; border: 1px solid #E0E0E0; }
         .mensaje { margin-top: 20px; padding: 15px; border-radius: 10px; font-weight: bold; display: none; }
         .exito { background-color: #c8e6c9; color: #2e7d32; }
         .error { background-color: #ffcdd2; color: #d32f2f; }
@@ -97,6 +101,7 @@
         <select id="nombre">
             <option value="none" selected disabled>Selecciona tu nombre...</option>
         </select>
+        <div id="estado-persona" class="estado-persona" role="status"></div>
 
         <label class="etiqueta" for="lugar">Lugar de trabajo (solo para entrada)</label>
         <select id="lugar">
@@ -139,7 +144,7 @@
         // del Apps Script): marcaba, salia "registrada", pero la marca no quedaba donde la busca la version actual.
         // Ahora: al volver a la pagina despues de un rato se recarga entera, y si se publico una version nueva
         // (version.txt distinto) tambien se recarga, aunque la pagina nunca se haya cerrado (PC de escritorio).
-        const VERSION = '2026-11-25';
+        const VERSION = '2026-11-25b';
         let ocultaDesde = 0;
         function recargar() {
             // Freno: si recien se recargo (menos de 2 minutos) no vuelve a hacerlo, para que nunca quede en bucle
@@ -214,6 +219,22 @@
                 .catch(error => console.error('Error al obtener datos:', error));
         }
 
+        // Al elegir el nombre se piden los datos de nuevo y se muestra en que estado esta esa persona AHORA.
+        // Asi nadie toca "Salida" o "Entrada" guiandose por una pantalla vieja.
+        let datosFrescos = false;
+        function pintarPersona() {
+            const caja = document.getElementById('estado-persona');
+            const nombre = document.getElementById('nombre').value;
+            if (!nombre || nombre === 'none') { caja.className = 'estado-persona'; return; }
+            if (!datosFrescos) { caja.className = 'estado-persona cargando'; caja.innerText = 'Consultando tu estado...'; return; }
+            const adentro = datosEnSala.find(e => e.nombre === nombre);
+            const salio = datosFinalizados.find(e => e.nombre === nombre);
+            if (adentro) { caja.className = 'estado-persona adentro'; caja.innerText = '✅ Entraste hoy a las ' + adentro.entrada + ' (' + adentro.lugar + '). Cuando te vayas, marcá SALIDA.'; }
+            else if (salio) { caja.className = 'estado-persona afuera'; caja.innerText = 'Hoy ya marcaste entrada (' + salio.entrada + ') y salida (' + salio.salida + ').'; }
+            else { caja.className = 'estado-persona afuera'; caja.innerText = 'Todavía no marcaste entrada hoy.'; }
+        }
+        document.getElementById('nombre').addEventListener('change', () => { datosFrescos = false; pintarPersona(); actualizarPantalla(); });
+
         function pintarEstado(datos) {
                     document.getElementById('num-sala').innerText = datos.en_sala;
                     document.getElementById('num-total').innerText = datos.total;
@@ -239,6 +260,8 @@
                         selLugar.innerHTML += `<option value="${esc(l)}" ${attr}>${esc(l)}</option>`;
                     });
                     mostrarCampoOtro();
+                    datosFrescos = true;
+                    pintarPersona();
         }
         actualizarPantalla();
         // Refresca cada 30 segundos para ver lo que marcan en otros edificios
@@ -269,15 +292,25 @@
             const listo = () => { botones.forEach(b => b.disabled = false); boton.innerHTML = textoBoton; };
 
             // Si se publico una version nueva, primero se recarga (asi nadie marca con la pagina vieja)
-            revisarVersion().then(vigente => { if (!vigente) return;
+            revisarVersion().then(vigente => { if (!vigente) return; enviar(false); });
+
+            function enviar(confirmado) {
             // text/plain para que el navegador no haga la consulta previa (CORS) que Apps Script no responde
             fetch(API_URL, {
                 method: 'POST',
                 headers: {'Content-Type': 'text/plain;charset=utf-8'},
-                body: JSON.stringify({ nombre: nombre, tipo: tipo, lugar: lugar, lugarOtro: lugarOtro })
+                body: JSON.stringify({ nombre: nombre, tipo: tipo, lugar: lugar, lugarOtro: lugarOtro, confirmado: confirmado })
             })
                 .then(r => r.json())
                 .then(datos => {
+                    // Marca sospechosa (salida a los pocos minutos de entrar, o volver a entrar): el sistema pregunta antes
+                    if (datos.status === 'confirmar') {
+                        if (datos.estado) pintarEstado(datos.estado);
+                        if (confirm(datos.msg)) { enviar(true); return; }
+                        listo();
+                        mostrarMensaje('No se marcó nada.', 'error', 4000);
+                        return;
+                    }
                     listo();
                     mostrarMensaje(datos.msg, datos.status === 'success' ? 'exito' : 'error');
                     if (datos.status === 'success') document.getElementById('lugar-otro').value = '';
@@ -289,7 +322,7 @@
                     // Bien visible y por mas tiempo: antes duraba 3 segundos y la gente se iba creyendo que habia marcado
                     mostrarMensaje('❌ NO SE REGISTRÓ. Revisá la conexión y volvé a tocar el botón.', 'error', 10000);
                 });
-            });
+            }
         }
 
         let tMensaje;
