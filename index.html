@@ -139,7 +139,7 @@
         // del Apps Script): marcaba, salia "registrada", pero la marca no quedaba donde la busca la version actual.
         // Ahora: al volver a la pagina despues de un rato se recarga entera, y si se publico una version nueva
         // (version.txt distinto) tambien se recarga, aunque la pagina nunca se haya cerrado (PC de escritorio).
-        const VERSION = '2026-11-19b';
+        const VERSION = '2026-11-25';
         let ocultaDesde = 0;
         function recargar() {
             // Freno: si recien se recargo (menos de 2 minutos) no vuelve a hacerlo, para que nunca quede en bucle
@@ -300,7 +300,9 @@
             notif.style.display = 'block';
             clearTimeout(tMensaje);
             // Los errores quedan mas tiempo en pantalla que los avisos de exito
-            tMensaje = setTimeout(() => { notif.style.display = 'none'; }, duracion || (claseColor === 'error' ? 8000 : 3000));
+            // Los mensajes largos (por ejemplo, el aviso de una salida olvidada) tambien quedan mas tiempo
+            const largo = texto.length > 45;
+            tMensaje = setTimeout(() => { notif.style.display = 'none'; }, duracion || (claseColor === 'error' || largo ? 10000 : 3000));
         }
 
         function abrirConsulta(tipo) {
